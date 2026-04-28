@@ -1,7 +1,7 @@
 /**
- * 心率传感器拓展
+ * Heart Rate Sensor
  */
-//% color="#d81b60" weight=100 block="心率传感器"
+//% color="#d81b60" weight=100 icon="\uf21e" block="Heart Rate Sensor"
 namespace heartRate {
     let BPM = 0
     let Signal = 0
@@ -31,7 +31,7 @@ namespace heartRate {
     let beatEvent = false
 
     function readPulseSignal(): number {
-        // 固定读取 Circuit Playground 的 A1
+        // Fixed analog input pin: A1
         return pins.A1.analogRead()
     }
 
@@ -67,19 +67,19 @@ namespace heartRate {
         sampleCounter += 2
         let N = sampleCounter - lastBeatTime
 
-        // 找波谷
+        // Find the trough
         if (Signal < thresh && N > Math.idiv(IBI * 3, 5)) {
             if (Signal < T) {
                 T = Signal
             }
         }
 
-        // 找波峰
+        // Find the peak
         if (Signal > thresh && Signal > P) {
             P = Signal
         }
 
-        // 寻找心跳
+        // Detect heartbeat
         if (N > 250) {
             if (Signal > thresh && !Pulse && N > Math.idiv(IBI * 3, 5)) {
                 Pulse = true
@@ -118,7 +118,7 @@ namespace heartRate {
             }
         }
 
-        // 波形回落，重算阈值
+        // Recalculate threshold after the signal falls
         if (Signal < thresh && Pulse) {
             Pulse = false
             amp = P - T
@@ -127,7 +127,7 @@ namespace heartRate {
             T = thresh
         }
 
-        // 太久没检测到，复位
+        // Reset if no heartbeat is detected for too long
         if (N > 2500) {
             thresh = 512
             P = 512
@@ -139,9 +139,9 @@ namespace heartRate {
     }
 
     /**
-     * 初始化心率传感器，信号脚固定接 A1
+     * Start heart rate sensor sampling on A1.
      */
-    //% blockId=heart_rate_start block="初始化心率传感器 A1"
+    //% blockId=heart_rate_start block="start heart rate sensor on A1"
     //% weight=100
     export function start(): void {
         resetVariables()
@@ -164,45 +164,45 @@ namespace heartRate {
     }
 
     /**
-     * 停止心率传感器采样
+     * Stop heart rate sensor sampling.
      */
-    //% blockId=heart_rate_stop block="停止心率传感器"
+    //% blockId=heart_rate_stop block="stop heart rate sensor"
     //% weight=90
     export function stop(): void {
         running = false
     }
 
     /**
-     * 读取当前原始模拟值
+     * Get raw analog value from the heart rate sensor.
      */
-    //% blockId=heart_rate_raw block="心率原始值"
+    //% blockId=heart_rate_raw block="heart rate raw value"
     //% weight=80
     export function raw(): number {
         return Signal
     }
 
     /**
-     * 读取当前 BPM
+     * Get current BPM value.
      */
-    //% blockId=heart_rate_bpm block="当前 BPM"
+    //% blockId=heart_rate_bpm block="heart rate BPM"
     //% weight=70
     export function bpm(): number {
         return BPM
     }
 
     /**
-     * 读取当前 IBI，单位 ms
+     * Get current IBI value in milliseconds.
      */
-    //% blockId=heart_rate_ibi block="当前 IBI"
+    //% blockId=heart_rate_ibi block="heart rate IBI"
     //% weight=60
     export function ibi(): number {
         return IBI
     }
 
     /**
-     * 是否检测到新的心跳
+     * Return true when a new heartbeat is detected.
      */
-    //% blockId=heart_rate_beat_detected block="检测到新心跳"
+    //% blockId=heart_rate_beat_detected block="heartbeat detected"
     //% weight=50
     export function beatDetected(): boolean {
         let result = beatEvent
@@ -211,12 +211,12 @@ namespace heartRate {
     }
 
     /**
-     * 按原 Arduino 程序格式输出串口：
-     * S 原始值
-     * B BPM
-     * Q IBI
+     * Output heart rate data to serial.
+     * S = raw signal
+     * B = BPM
+     * Q = IBI
      */
-    //% blockId=heart_rate_serial_output block="串口输出心率数据"
+    //% blockId=heart_rate_serial_output block="serial output heart rate data"
     //% weight=40
     export function serialOutput(): void {
         serial.writeLine("S" + Signal)
@@ -229,9 +229,9 @@ namespace heartRate {
     }
 
     /**
-     * 手动复位心率算法
+     * Reset heart rate algorithm.
      */
-    //% blockId=heart_rate_reset block="复位心率算法"
+    //% blockId=heart_rate_reset block="reset heart rate algorithm"
     //% weight=30
     export function reset(): void {
         resetVariables()
