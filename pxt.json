@@ -1,133 +1,21 @@
-//% color=#ff3366 icon="\uf21e"
-namespace HeartRate {
-
-    let pulsePin = AnalogPin.P1
-
-    let BPM = 0
-    let Signal = 0
-    let IBI = 600
-    let Pulse = false
-    let QS = false
-
-    let rate: number[] = [600,600,600,600,600,600,600,600,600,600]
-
-    let sampleCounter = 0
-    let lastBeatTime = 0
-    let P = 512
-    let T = 512
-    let thresh = 512
-    let amp = 100
-    let firstBeat = true
-    let secondBeat = false
-
-    //% block="设置心率传感器引脚 %pin"
-    export function setPulsePin(pin: AnalogPin): void {
-        pulsePin = pin
-    }
-
-    //% block="读取原始心率信号"
-    export function readSignal(): number {
-        Signal = pins.analogReadPin(pulsePin)
-        return Signal
-    }
-
-    function samplePulseSensor(): void {
-        Signal = pins.analogReadPin(pulsePin)
-        sampleCounter += 2
-        let N = sampleCounter - lastBeatTime
-
-        // 找波谷
-        if (Signal < thresh && N > (IBI / 5) * 3) {
-            if (Signal < T) {
-                T = Signal
-            }
-        }
-
-        // 找波峰
-        if (Signal > thresh && Signal > P) {
-            P = Signal
-        }
-
-        // 检测心跳
-        if (N > 250) {
-            if ((Signal > thresh) && (!Pulse) && (N > (IBI / 5) * 3)) {
-                Pulse = true
-                IBI = sampleCounter - lastBeatTime
-                lastBeatTime = sampleCounter
-
-                if (secondBeat) {
-                    secondBeat = false
-                    for (let i = 0; i < 10; i++) {
-                        rate[i] = IBI
-                    }
-                }
-
-                if (firstBeat) {
-                    firstBeat = false
-                    secondBeat = true
-                    return
-                }
-
-                let runningTotal = 0
-
-                for (let i = 0; i < 9; i++) {
-                    rate[i] = rate[i + 1]
-                    runningTotal += rate[i]
-                }
-
-                rate[9] = IBI
-                runningTotal += rate[9]
-                runningTotal = Math.idiv(runningTotal, 10)
-
-                BPM = Math.idiv(60000, runningTotal)
-                QS = true
-            }
-        }
-
-        // 波形回落
-        if (Signal < thresh && Pulse) {
-            Pulse = false
-            amp = P - T
-            thresh = Math.idiv(amp, 2) + T
-            P = thresh
-            T = thresh
-        }
-
-        // 超时复位
-        if (N > 2500) {
-            thresh = 512
-            P = 512
-            T = 512
-            lastBeatTime = sampleCounter
-            firstBeat = true
-            secondBeat = false
-        }
-    }
-
-    //% block="更新心率数据"
-    export function update(): void {
-        samplePulseSensor()
-    }
-
-    //% block="获取 BPM 心率"
-    export function getBPM(): number {
-        samplePulseSensor()
-        return BPM
-    }
-
-    //% block="获取 IBI 间隔"
-    export function getIBI(): number {
-        samplePulseSensor()
-        return IBI
-    }
-
-    //% block="检测到新心跳"
-    export function beatDetected(): boolean {
-        samplePulseSensor()
-        if (QS) {
-            QS = false
-            return true
-        }
-        return false
-    }
+{
+    "name": "test",
+    "version": "0.0.0",
+    "description": "",
+    "dependencies": {
+        "circuit-playground": "*"
+    },
+    "files": [
+        "README.md",
+        "main.blocks",
+        "main.ts"
+    ],
+    "testFiles": [
+        "test.ts"
+    ],
+    "public": true,
+    "supportedTargets": [
+        "adafruit"
+    ],
+    "preferredEditor": "blocksprj"
 }
