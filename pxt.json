@@ -6,16 +6,11 @@
         "core": "*"
     },
     "files": [
-        "README.md",
-        "main.blocks",
-        "main.ts"
+        "main.ts",
+        "README.md"
     ],
     "testFiles": [
         "test.ts"
     ],
-    "public": true,
-    "supportedTargets": [
-        "adafruit"
-    ],
-    "preferredEditor": "blocksprj"
+    "public": true
 }
