@@ -1,6 +1,6 @@
 {
     "name": "heart-rate-sensor",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Heart rate sensor extension for MakeCode Adafruit",
     "dependencies": {
         "core": "*"
@@ -8,9 +8,6 @@
     "files": [
         "main.ts",
         "README.md"
-    ],
-    "testFiles": [
-        "test.ts"
     ],
     "public": true
 }
