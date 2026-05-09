@@ -6,13 +6,7 @@ namespace heartRate {
     let initialized = false
     let samplerStarted = false
 
-    // 原始 ADC 值
     let rawValue = 0
-
-    // 统一校准后的信号值
-    // 图像输出和 BPM 算法都使用这个值
-    let signalValue = 512
-
     let bpmValue = 0
     let ibiValue = 600
 
@@ -31,8 +25,9 @@ namespace heartRate {
 
     let sampleCounter = 0
     let lastBeatTime = 0
+    let lastSampleMs = 0
 
-    // BPM 算法使用的是 signalValue，所以阈值可以继续围绕 512 工作
+    // 与原版一致的变量
     let peakValue = 512
     let troughValue = 512
     let thresholdValue = 512
@@ -41,44 +36,8 @@ namespace heartRate {
     let firstBeat = true
     let secondBeat = false
 
-    let startTimeMs = 0
-
-    // ================= 统一信号校准 =================
-    let calibrationReady = false
-
-    let calWindowStartMs = 0
-    let calMin = 1023
-    let calMax = 0
-
-    // 原始信号中心点
-    // 比如你的原始信号 700 多，这个值会自动靠近 700 多
-    let signalMid = 512
-
-    // 原始信号幅度
-    let signalAmp = 100
-
-    // 校准窗口时间
-    let CAL_WINDOW_MS = 1000
-
-    // 最小有效幅度
-    let MIN_VALID_AMPLITUDE = 8
-
-    // 长时间没检测到心跳后，只重置 BPM 状态，不重置校准中心
-    let NO_BEAT_TIMEOUT_MS = 4000
-
-    function clampSignal(v: number): number {
-        if (v < 0) {
-            return 0
-        }
-
-        if (v > 1023) {
-            return 1023
-        }
-
-        return v
-    }
-
-    function resetBeatState(): void {
+    function resetValues(): void {
+        rawValue = 0
         bpmValue = 0
         ibiValue = 600
 
@@ -95,6 +54,10 @@ namespace heartRate {
             600, 600, 600, 600, 600
         ]
 
+        sampleCounter = 0
+        lastBeatTime = 0
+        lastSampleMs = control.millis()
+
         peakValue = 512
         troughValue = 512
         thresholdValue = 512
@@ -102,84 +65,6 @@ namespace heartRate {
 
         firstBeat = true
         secondBeat = false
-
-        sampleCounter = control.millis() - startTimeMs
-        lastBeatTime = sampleCounter
-    }
-
-    function resetCalibration(): void {
-        calibrationReady = false
-
-        calWindowStartMs = control.millis()
-        calMin = 1023
-        calMax = 0
-
-        signalMid = 512
-        signalAmp = 100
-        signalValue = 512
-    }
-
-    function updateUnifiedCalibration(): void {
-        // 第一次采样时，直接用当前 raw 作为中心，避免 700 多的信号一开始就高于 512
-        if (calMin == 1023 && calMax == 0) {
-            calMin = rawValue
-            calMax = rawValue
-            signalMid = rawValue
-        }
-
-        if (rawValue < calMin) {
-            calMin = rawValue
-        }
-
-        if (rawValue > calMax) {
-            calMax = rawValue
-        }
-
-        let now = control.millis()
-
-        if (now - calWindowStartMs >= CAL_WINDOW_MS) {
-            let windowAmp = calMax - calMin
-            let windowMid = Math.idiv(calMax + calMin, 2)
-
-            if (windowAmp >= MIN_VALID_AMPLITUDE) {
-                if (calibrationReady) {
-                    // 慢速跟随，防止阈值跳动太大
-                    signalMid = Math.idiv(signalMid * 3 + windowMid, 4)
-                    signalAmp = Math.idiv(signalAmp * 3 + windowAmp, 4)
-                } else {
-                    // 第一次有效校准
-                    signalMid = windowMid
-                    signalAmp = windowAmp
-                    calibrationReady = true
-                    resetBeatState()
-                }
-            } else {
-                // 波动太小，说明可能没有手指或信号太平
-                // 不乱改 BPM 状态，只让图像和 BPM 继续基于当前中心工作
-                if (!calibrationReady) {
-                    signalMid = rawValue
-                }
-            }
-
-            calMin = rawValue
-            calMax = rawValue
-            calWindowStartMs = now
-        }
-
-        // 统一校准输出：
-        // 把 700 多的原始信号平移到 512 附近
-        // 图像输出和 BPM 都用这个 signalValue
-        signalValue = clampSignal(rawValue - signalMid + 512)
-    }
-
-    function resetValues(): void {
-        rawValue = 0
-        signalValue = 512
-
-        startTimeMs = control.millis()
-
-        resetCalibration()
-        resetBeatState()
     }
 
     function samplePulseSensor(): void {
@@ -188,33 +73,40 @@ namespace heartRate {
         }
 
         rawValue = pins.A1.analogRead()
-        sampleCounter = control.millis() - startTimeMs
 
-        // 先做统一校准
-        updateUnifiedCalibration()
+        // 原版是 Timer2 每 2ms 进一次中断，sampleCounter += 2。
+        // MakeCode 的 pause(2) 不一定严格等于 2ms，所以这里用真实 millis 差值更稳。
+        let now = control.millis()
+        let dt = now - lastSampleMs
 
-        // 校准还没准备好时，只输出图像 S 信号，不计算 BPM
-        if (!calibrationReady) {
+        if (dt <= 0) {
             return
         }
 
+        lastSampleMs = now
+        sampleCounter += dt
+
         let N = sampleCounter - lastBeatTime
 
-        // ================= 更新波谷 =================
-        if (signalValue < thresholdValue && N > Math.idiv(ibiValue * 3, 5)) {
-            if (signalValue < troughValue) {
-                troughValue = signalValue
+        // ================= 找波谷 T =================
+        // 对应原版：
+        // if(Signal < thresh && N > (IBI/5)*3)
+        if (rawValue < thresholdValue && N > Math.idiv(ibiValue, 5) * 3) {
+            if (rawValue < troughValue) {
+                troughValue = rawValue
             }
         }
 
-        // ================= 更新波峰 =================
-        if (signalValue > thresholdValue && signalValue > peakValue) {
-            peakValue = signalValue
+        // ================= 找波峰 P =================
+        // 对应原版：
+        // if(Signal > thresh && Signal > P)
+        if (rawValue > thresholdValue && rawValue > peakValue) {
+            peakValue = rawValue
         }
 
         // ================= 检测心跳上升沿 =================
         if (N > 250) {
-            if (signalValue > thresholdValue && !pulse && N > Math.idiv(ibiValue * 3, 5)) {
+            if (rawValue > thresholdValue && !pulse && N > Math.idiv(ibiValue, 5) * 3) {
                 pulse = true
 
                 ibiValue = sampleCounter - lastBeatTime
@@ -258,25 +150,42 @@ namespace heartRate {
         }
 
         // ================= 检测心跳下降沿，并更新自适应阈值 =================
-        if (signalValue < thresholdValue && pulse) {
+        // 对应原版：
+        // if (Signal < thresh && Pulse == true)
+        if (rawValue < thresholdValue && pulse) {
             pulse = false
 
             amplitudeValue = peakValue - troughValue
 
-            if (amplitudeValue >= MIN_VALID_AMPLITUDE) {
-                thresholdValue = Math.idiv(amplitudeValue, 2) + troughValue
-            } else {
-                // 校准后的信号中心是 512，所以这里不要回原始 700 多
-                thresholdValue = 512
-            }
+            // 对应原版：
+            // thresh = amp/2 + T
+            thresholdValue = Math.idiv(amplitudeValue, 2) + troughValue
 
             peakValue = thresholdValue
             troughValue = thresholdValue
         }
 
-        // ================= 长时间无心跳，只重置心跳识别状态 =================
-        if (N > NO_BEAT_TIMEOUT_MS) {
-            resetBeatState()
+        // ================= 超时复位 =================
+        // 对应原版：
+        // if (N > 2500)
+        if (N > 2500) {
+            thresholdValue = 512
+            peakValue = 512
+            troughValue = 512
+
+            lastBeatTime = sampleCounter
+
+            firstBeat = true
+            secondBeat = false
+
+            pulse = false
+            beatEvent = false
+            qsFlag = false
+
+            imageOutputStep = 0
+
+            bpmValue = 0
+            ibiValue = 600
         }
     }
 
@@ -386,6 +295,7 @@ namespace heartRate {
             imageOutputStep = 1
         }
 
-        return "S" + signalValue
+        // 和原版一致：S 输出原始 Signal，不输出二次校准后的值
+        return "S" + rawValue
     }
 }
